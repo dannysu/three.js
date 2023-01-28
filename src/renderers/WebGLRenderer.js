@@ -965,10 +965,10 @@ function WebGLRenderer( parameters = {} ) {
 
 	if ( typeof self !== 'undefined' ) animation.setContext( self );
 
-	this.setAnimationLoop = function ( callback ) {
+	this.setAnimationLoop = function ( callback, velocityCallback ) {
 
 		onAnimationFrameCallback = callback;
-		xr.setAnimationLoop( callback );
+		xr.setAnimationLoop( callback, velocityCallback );
 
 		( callback === null ) ? animation.stop() : animation.start();
 
@@ -1412,6 +1412,12 @@ function WebGLRenderer( parameters = {} ) {
 
 		object.onBeforeRender( _this, scene, camera, geometry, material, group );
 
+		if ( _this.xr && _this.xr.spaceWarpOnBeforeRender ) {
+
+			material = _this.xr.spaceWarpOnBeforeRender( object, material );
+
+		}
+
 		object.modelViewMatrix.multiplyMatrices( camera.matrixWorldInverse, object.matrixWorld );
 		object.normalMatrix.getNormalMatrix( object.modelViewMatrix );
 
@@ -1432,6 +1438,12 @@ function WebGLRenderer( parameters = {} ) {
 		} else {
 
 			_this.renderBufferDirect( camera, scene, geometry, material, object, group );
+
+		}
+
+		if ( _this.xr && _this.xr.spaceWarpOnAfterRender ) {
+
+			_this.xr.spaceWarpOnAfterRender( object );
 
 		}
 

@@ -7,6 +7,24 @@
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
+function _interopNamespace(e) {
+	if (e && e.__esModule) return e;
+	var n = Object.create(null);
+	if (e) {
+		Object.keys(e).forEach(function (k) {
+			if (k !== 'default') {
+				var d = Object.getOwnPropertyDescriptor(e, k);
+				Object.defineProperty(n, k, d.get ? d : {
+					enumerable: true,
+					get: function () { return e[k]; }
+				});
+			}
+		});
+	}
+	n["default"] = e;
+	return Object.freeze(n);
+}
+
 const REVISION = '145dev';
 const MOUSE = {
 	LEFT: 0,
@@ -18622,6 +18640,9 @@ class WebXRManager extends EventDispatcher {
 		const attributes = gl.getContextAttributes();
 		let initialRenderTarget = null;
 		let newRenderTarget = null;
+		let velocityRenderTarget = null;
+		let velocityShader = null;
+		let isRenderingSpaceWarp = false;
 		const controllers = [];
 		const controllerInputSources = []; //
 
@@ -18719,7 +18740,8 @@ class WebXRManager extends EventDispatcher {
 			glProjLayer = null;
 			glBinding = null;
 			session = null;
-			newRenderTarget = null; //
+			newRenderTarget = null;
+			velocityRenderTarget = null; //
 
 			animation.stop();
 			scope.isPresenting = false;
@@ -18772,6 +18794,11 @@ class WebXRManager extends EventDispatcher {
 			session = value;
 
 			if (session !== null) {
+				if (velocityShader === null) {
+					const velocityShaderModule = await Promise.resolve().then(function () { return /*#__PURE__*/_interopNamespace(require('three/addons/shaders/VelocityShader.js')); });
+					velocityShader = velocityShaderModule['VelocityShader'];
+				}
+
 				initialRenderTarget = renderer.getRenderTarget();
 				session.addEventListener('select', onSessionEvent);
 				session.addEventListener('selectstart', onSessionEvent);
@@ -19058,6 +19085,8 @@ class WebXRManager extends EventDispatcher {
 			}
 		};
 
+		let onVelocityCallback = null;
+
 		function onAnimationFrame(time, frame) {
 			pose = frame.getViewerPose(customReferenceSpace || referenceSpace);
 			xrFrame = frame;
@@ -19116,14 +19145,70 @@ class WebXRManager extends EventDispatcher {
 			}
 
 			if (onAnimationFrameCallback) onAnimationFrameCallback(time, frame);
+
+			if (onVelocityCallback) {
+				isRenderingSpaceWarp = true;
+
+				if (velocityRenderTarget === null) {
+					const rtOptions = {
+						format: RGBAFormat,
+						type: HalfFloatType,
+						depthTexture: new DepthTexture(glSubImage.depthStencilTextureWidth, glSubImage.textureHeight, UnsignedInt248Type, undefined, undefined, undefined, undefined, undefined, undefined, DepthFormat),
+						stencilBuffer: attributes.stencil,
+						encoding: renderer.outputEncoding,
+						samples: 0
+					};
+					extensions.get('OCULUS_multiview');
+					velocityRenderTarget = new WebGLMultiviewRenderTarget(glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight, 2, rtOptions);
+				}
+
+				renderer.setRenderTargetTextures(velocityRenderTarget, glSubImage.motionVectorTexture, glSubImage.depthStencilTexture);
+				renderer.setRenderTarget(velocityRenderTarget);
+				cameraVR.cameras[0].viewport.set(0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight);
+				cameraVR.cameras[1].viewport.set(0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight);
+				onVelocityCallback(time, frame);
+				isRenderingSpaceWarp = false;
+			}
+
 			xrFrame = null;
 		}
+
+		this.spaceWarpOnBeforeRender = function (object, material) {
+			if (isRenderingSpaceWarp === false) {
+				return material;
+			}
+
+			if (object._velocityMaterial === undefined) {
+				object._velocityMaterial = new ShaderMaterial({
+					uniforms: UniformsUtils.clone(velocityShader.uniforms),
+					vertexShader: velocityShader.vertexShader,
+					fragmentShader: velocityShader.fragmentShader,
+					side: material.side
+				});
+				object._velocityMaterial.precision = 'highp';
+			}
+
+			return object._velocityMaterial;
+		};
+
+		this.spaceWarpOnAfterRender = function (object) {
+			if (isRenderingSpaceWarp === false) {
+				return;
+			}
+
+			object._velocityMaterial.uniforms.previousViewMatrix.value[0].copy(cameraVR.cameras[0].matrixWorldInverse);
+
+			object._velocityMaterial.uniforms.previousViewMatrix.value[1].copy(cameraVR.cameras[1].matrixWorldInverse);
+
+			object._velocityMaterial.uniforms.previousModelMatrix.value.copy(object.matrixWorld);
+		};
 
 		const animation = new WebGLAnimation();
 		animation.setAnimationLoop(onAnimationFrame);
 
-		this.setAnimationLoop = function (callback) {
+		this.setAnimationLoop = function (callback, velocityCallback) {
 			onAnimationFrameCallback = callback;
+			onVelocityCallback = velocityCallback;
 		};
 
 		this.dispose = function () {};
@@ -20468,9 +20553,9 @@ function WebGLRenderer(parameters = {}) {
 	animation.setAnimationLoop(onAnimationFrame);
 	if (typeof self !== 'undefined') animation.setContext(self);
 
-	this.setAnimationLoop = function (callback) {
+	this.setAnimationLoop = function (callback, velocityCallback) {
 		onAnimationFrameCallback = callback;
-		xr.setAnimationLoop(callback);
+		xr.setAnimationLoop(callback, velocityCallback);
 		callback === null ? animation.stop() : animation.start();
 	};
 
@@ -20770,6 +20855,11 @@ function WebGLRenderer(parameters = {}) {
 
 	function renderObject(object, scene, camera, geometry, material, group) {
 		object.onBeforeRender(_this, scene, camera, geometry, material, group);
+
+		if (_this.xr && _this.xr.spaceWarpOnBeforeRender) {
+			material = _this.xr.spaceWarpOnBeforeRender(object, material);
+		}
+
 		object.modelViewMatrix.multiplyMatrices(camera.matrixWorldInverse, object.matrixWorld);
 		object.normalMatrix.getNormalMatrix(object.modelViewMatrix);
 		material.onBeforeRender(_this, scene, camera, geometry, object, group);
@@ -20788,6 +20878,10 @@ function WebGLRenderer(parameters = {}) {
 			material.side = DoubleSide;
 		} else {
 			_this.renderBufferDirect(camera, scene, geometry, material, object, group);
+		}
+
+		if (_this.xr && _this.xr.spaceWarpOnAfterRender) {
+			_this.xr.spaceWarpOnAfterRender(object);
 		}
 
 		object.onAfterRender(_this, scene, camera, geometry, material, group);
@@ -34812,15 +34906,15 @@ class PointLightHelper extends Mesh {
 		// TODO: delete this comment?
 		const distanceGeometry = new THREE.IcosahedronGeometry( 1, 2 );
 		const distanceMaterial = new THREE.MeshBasicMaterial( { color: hexColor, fog: false, wireframe: true, opacity: 0.1, transparent: true } );
-		this.lightSphere = new THREE.Mesh( bulbGeometry, bulbMaterial );
+			this.lightSphere = new THREE.Mesh( bulbGeometry, bulbMaterial );
 		this.lightDistance = new THREE.Mesh( distanceGeometry, distanceMaterial );
-		const d = light.distance;
-		if ( d === 0.0 ) {
-			this.lightDistance.visible = false;
-		} else {
-			this.lightDistance.scale.set( d, d, d );
-		}
-		this.add( this.lightDistance );
+			const d = light.distance;
+			if ( d === 0.0 ) {
+				this.lightDistance.visible = false;
+			} else {
+				this.lightDistance.scale.set( d, d, d );
+			}
+			this.add( this.lightDistance );
 		*/
 	}
 
@@ -34837,12 +34931,12 @@ class PointLightHelper extends Mesh {
 		}
 		/*
 		const d = this.light.distance;
-			if ( d === 0.0 ) {
-				this.lightDistance.visible = false;
-			} else {
-				this.lightDistance.visible = true;
+				if ( d === 0.0 ) {
+					this.lightDistance.visible = false;
+				} else {
+					this.lightDistance.visible = true;
 			this.lightDistance.scale.set( d, d, d );
-			}
+				}
 		*/
 
 	}
@@ -35342,7 +35436,7 @@ class BoxHelper extends LineSegments {
 		1/___0/|
 		| 6__|_7
 		2/___3/
-			0: max.x, max.y, max.z
+				0: max.x, max.y, max.z
 		1: min.x, max.y, max.z
 		2: min.x, min.y, max.z
 		3: max.x, min.y, max.z

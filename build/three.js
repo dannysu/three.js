@@ -18624,6 +18624,9 @@
 			const attributes = gl.getContextAttributes();
 			let initialRenderTarget = null;
 			let newRenderTarget = null;
+			let velocityRenderTarget = null;
+			let velocityShader = null;
+			let isRenderingSpaceWarp = false;
 			const controllers = [];
 			const controllerInputSources = []; //
 
@@ -18721,7 +18724,8 @@
 				glProjLayer = null;
 				glBinding = null;
 				session = null;
-				newRenderTarget = null; //
+				newRenderTarget = null;
+				velocityRenderTarget = null; //
 
 				animation.stop();
 				scope.isPresenting = false;
@@ -18774,6 +18778,11 @@
 				session = value;
 
 				if (session !== null) {
+					if (velocityShader === null) {
+						const velocityShaderModule = await import('three/addons/shaders/VelocityShader.js');
+						velocityShader = velocityShaderModule['VelocityShader'];
+					}
+
 					initialRenderTarget = renderer.getRenderTarget();
 					session.addEventListener('select', onSessionEvent);
 					session.addEventListener('selectstart', onSessionEvent);
@@ -19060,6 +19069,8 @@
 				}
 			};
 
+			let onVelocityCallback = null;
+
 			function onAnimationFrame(time, frame) {
 				pose = frame.getViewerPose(customReferenceSpace || referenceSpace);
 				xrFrame = frame;
@@ -19118,14 +19129,70 @@
 				}
 
 				if (onAnimationFrameCallback) onAnimationFrameCallback(time, frame);
+
+				if (onVelocityCallback) {
+					isRenderingSpaceWarp = true;
+
+					if (velocityRenderTarget === null) {
+						const rtOptions = {
+							format: RGBAFormat,
+							type: HalfFloatType,
+							depthTexture: new DepthTexture(glSubImage.depthStencilTextureWidth, glSubImage.textureHeight, UnsignedInt248Type, undefined, undefined, undefined, undefined, undefined, undefined, DepthFormat),
+							stencilBuffer: attributes.stencil,
+							encoding: renderer.outputEncoding,
+							samples: 0
+						};
+						extensions.get('OCULUS_multiview');
+						velocityRenderTarget = new WebGLMultiviewRenderTarget(glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight, 2, rtOptions);
+					}
+
+					renderer.setRenderTargetTextures(velocityRenderTarget, glSubImage.motionVectorTexture, glSubImage.depthStencilTexture);
+					renderer.setRenderTarget(velocityRenderTarget);
+					cameraVR.cameras[0].viewport.set(0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight);
+					cameraVR.cameras[1].viewport.set(0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight);
+					onVelocityCallback(time, frame);
+					isRenderingSpaceWarp = false;
+				}
+
 				xrFrame = null;
 			}
+
+			this.spaceWarpOnBeforeRender = function (object, material) {
+				if (isRenderingSpaceWarp === false) {
+					return material;
+				}
+
+				if (object._velocityMaterial === undefined) {
+					object._velocityMaterial = new ShaderMaterial({
+						uniforms: UniformsUtils.clone(velocityShader.uniforms),
+						vertexShader: velocityShader.vertexShader,
+						fragmentShader: velocityShader.fragmentShader,
+						side: material.side
+					});
+					object._velocityMaterial.precision = 'highp';
+				}
+
+				return object._velocityMaterial;
+			};
+
+			this.spaceWarpOnAfterRender = function (object) {
+				if (isRenderingSpaceWarp === false) {
+					return;
+				}
+
+				object._velocityMaterial.uniforms.previousViewMatrix.value[0].copy(cameraVR.cameras[0].matrixWorldInverse);
+
+				object._velocityMaterial.uniforms.previousViewMatrix.value[1].copy(cameraVR.cameras[1].matrixWorldInverse);
+
+				object._velocityMaterial.uniforms.previousModelMatrix.value.copy(object.matrixWorld);
+			};
 
 			const animation = new WebGLAnimation();
 			animation.setAnimationLoop(onAnimationFrame);
 
-			this.setAnimationLoop = function (callback) {
+			this.setAnimationLoop = function (callback, velocityCallback) {
 				onAnimationFrameCallback = callback;
+				onVelocityCallback = velocityCallback;
 			};
 
 			this.dispose = function () {};
@@ -20470,9 +20537,9 @@
 		animation.setAnimationLoop(onAnimationFrame);
 		if (typeof self !== 'undefined') animation.setContext(self);
 
-		this.setAnimationLoop = function (callback) {
+		this.setAnimationLoop = function (callback, velocityCallback) {
 			onAnimationFrameCallback = callback;
-			xr.setAnimationLoop(callback);
+			xr.setAnimationLoop(callback, velocityCallback);
 			callback === null ? animation.stop() : animation.start();
 		};
 
@@ -20772,6 +20839,11 @@
 
 		function renderObject(object, scene, camera, geometry, material, group) {
 			object.onBeforeRender(_this, scene, camera, geometry, material, group);
+
+			if (_this.xr && _this.xr.spaceWarpOnBeforeRender) {
+				material = _this.xr.spaceWarpOnBeforeRender(object, material);
+			}
+
 			object.modelViewMatrix.multiplyMatrices(camera.matrixWorldInverse, object.matrixWorld);
 			object.normalMatrix.getNormalMatrix(object.modelViewMatrix);
 			material.onBeforeRender(_this, scene, camera, geometry, object, group);
@@ -20790,6 +20862,10 @@
 				material.side = DoubleSide;
 			} else {
 				_this.renderBufferDirect(camera, scene, geometry, material, object, group);
+			}
+
+			if (_this.xr && _this.xr.spaceWarpOnAfterRender) {
+				_this.xr.spaceWarpOnAfterRender(object);
 			}
 
 			object.onAfterRender(_this, scene, camera, geometry, material, group);
@@ -34814,15 +34890,15 @@
 			// TODO: delete this comment?
 			const distanceGeometry = new THREE.IcosahedronGeometry( 1, 2 );
 			const distanceMaterial = new THREE.MeshBasicMaterial( { color: hexColor, fog: false, wireframe: true, opacity: 0.1, transparent: true } );
-			this.lightSphere = new THREE.Mesh( bulbGeometry, bulbMaterial );
+				this.lightSphere = new THREE.Mesh( bulbGeometry, bulbMaterial );
 			this.lightDistance = new THREE.Mesh( distanceGeometry, distanceMaterial );
-			const d = light.distance;
-			if ( d === 0.0 ) {
-				this.lightDistance.visible = false;
-			} else {
-				this.lightDistance.scale.set( d, d, d );
-			}
-			this.add( this.lightDistance );
+				const d = light.distance;
+				if ( d === 0.0 ) {
+					this.lightDistance.visible = false;
+				} else {
+					this.lightDistance.scale.set( d, d, d );
+				}
+				this.add( this.lightDistance );
 			*/
 		}
 
@@ -34839,12 +34915,12 @@
 			}
 			/*
 			const d = this.light.distance;
-				if ( d === 0.0 ) {
-					this.lightDistance.visible = false;
-				} else {
-					this.lightDistance.visible = true;
+					if ( d === 0.0 ) {
+						this.lightDistance.visible = false;
+					} else {
+						this.lightDistance.visible = true;
 				this.lightDistance.scale.set( d, d, d );
-				}
+					}
 			*/
 
 		}
@@ -35344,7 +35420,7 @@
 			1/___0/|
 			| 6__|_7
 			2/___3/
-				0: max.x, max.y, max.z
+					0: max.x, max.y, max.z
 			1: min.x, max.y, max.z
 			2: min.x, min.y, max.z
 			3: max.x, min.y, max.z
