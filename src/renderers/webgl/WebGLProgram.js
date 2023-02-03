@@ -686,6 +686,9 @@ function WebGLProgram( renderer, cacheKey, parameters, bindingStates ) {
 			'uniform vec3 cameraPosition;',
 			'uniform bool isOrthographic;',
 
+			parameters.velocity ? 'varying vec4 clipPositionCurrent;' : '',
+			parameters.velocity ? 'varying vec4 clipPositionPrevious;' : '',
+
 			( parameters.toneMapping !== NoToneMapping ) ? '#define TONE_MAPPING' : '',
 			( parameters.toneMapping !== NoToneMapping ) ? ShaderChunk[ 'tonemapping_pars_fragment' ] : '', // this code is required here because it is used by the toneMapping() function defined below
 			( parameters.toneMapping !== NoToneMapping ) ? getToneMappingFunction( 'toneMapping', parameters.toneMapping ) : '',

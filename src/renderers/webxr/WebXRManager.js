@@ -8,8 +8,7 @@ import { WebGLRenderTarget } from '../WebGLRenderTarget.js';
 import { WebGLMultiviewRenderTarget } from '../WebGLMultiviewRenderTarget.js';
 import { WebXRController } from './WebXRController.js';
 import { DepthTexture } from '../../textures/DepthTexture.js';
-import { ShaderMaterial } from '../../materials/ShaderMaterial.js';
-import { UniformsUtils } from '../shaders/UniformsUtils.js';
+import { VelocityMaterial } from '../../materials/VelocityMaterial.js';
 import {
 	DepthFormat,
 	DepthStencilFormat,
@@ -45,7 +44,6 @@ class WebXRManager extends EventDispatcher {
 		let initialRenderTarget = null;
 		let newRenderTarget = null;
 		let velocityRenderTarget = null;
-		let velocityShader = null;
 		let isRenderingSpaceWarp = false;
 
 		const controllers = [];
@@ -257,13 +255,6 @@ class WebXRManager extends EventDispatcher {
 			session = value;
 
 			if ( session !== null ) {
-
-				if ( velocityShader === null ) {
-
-					const velocityShaderModule = await import( 'three/addons/shaders/VelocityShader.js' );
-					velocityShader = velocityShaderModule[ 'VelocityShader' ];
-
-				}
 
 				initialRenderTarget = renderer.getRenderTarget();
 
@@ -801,10 +792,7 @@ class WebXRManager extends EventDispatcher {
 
 			if ( object._velocityMaterial === undefined ) {
 
-				object._velocityMaterial = new ShaderMaterial( {
-					uniforms: UniformsUtils.clone( velocityShader.uniforms ),
-					vertexShader: velocityShader.vertexShader,
-					fragmentShader: velocityShader.fragmentShader,
+				object._velocityMaterial = new VelocityMaterial( {
 					side: material.side
 				} );
 
@@ -824,9 +812,9 @@ class WebXRManager extends EventDispatcher {
 
 			}
 
-			object._velocityMaterial.uniforms.previousViewMatrix.value[ 0 ].copy( cameraVR.cameras[ 0 ].matrixWorldInverse );
-			object._velocityMaterial.uniforms.previousViewMatrix.value[ 1 ].copy( cameraVR.cameras[ 1 ].matrixWorldInverse );
-			object._velocityMaterial.uniforms.previousModelMatrix.value.copy( object.matrixWorld );
+			object._velocityMaterial.previousViewMatrices[ 0 ].copy( cameraVR.cameras[ 0 ].matrixWorldInverse );
+			object._velocityMaterial.previousViewMatrices[ 1 ].copy( cameraVR.cameras[ 1 ].matrixWorldInverse );
+			object._velocityMaterial.previousModelMatrix.copy( object.matrixWorld );
 
 		};
 
