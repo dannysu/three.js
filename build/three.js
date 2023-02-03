@@ -6920,8 +6920,6 @@
 			if (this.visible === false) data.visible = false;
 			if (this.toneMapped === false) data.toneMapped = false;
 			if (this.velocity === true) data.velocity = true;
-			if (this.previousModelMatrix !== undefined) data.previousModelMatrix = this.previousModelMatrix;
-			if (this.previousViewMatrices !== undefined) data.previousViewMatrices = this.previousViewMatrices;
 			if (this.fog === false) data.fog = false;
 			if (JSON.stringify(this.userData) !== '{}') data.userData = this.userData; // TODO: Copied from Object3D.toJSON
 
@@ -9941,7 +9939,7 @@
 
 	var project_vertex = "vec4 mvPosition = vec4( transformed, 1.0 );\n#ifdef USE_INSTANCING\n\tmvPosition = instanceMatrix * mvPosition;\n#endif\nmvPosition = modelViewMatrix * mvPosition;\ngl_Position = projectionMatrix * mvPosition;";
 
-	var velocity_vertex = "vec3 transformed = vec3( position );\nvec4 mvPosition = vec4( transformed, 1.0 );\n#ifdef USE_INSTANCING\n\tmvPosition = instanceMatrix * mvPosition;\n#endif\nclipPositionCurrent = projectionMatrix * ( modelViewMatrix * mvPosition );\nclipPositionPrevious = projectionMatrix * ( previousViewMatrix * (previousModelMatrix * mvPosition ));\ngl_Position = clipPositionCurrent;";
+	var velocity_vertex = "vec3 transformed = vec3( position );\nvec4 mvPosition = vec4( transformed, 1.0 );\nvec4 mvPreviousPosition = vec4( transformed, 1.0 );\n#ifdef USE_INSTANCING\n\tmvPosition = instanceMatrix * mvPosition;\n\tmvPreviousPosition = previousInstanceMatrix * mvPreviousPosition;\n#endif\nclipPositionCurrent = projectionMatrix * ( modelViewMatrix * mvPosition );\nclipPositionPrevious = projectionMatrix * ( previousViewMatrix * (previousModelMatrix * mvPreviousPosition ));\ngl_Position = clipPositionCurrent;";
 
 	var dithering_fragment = "#ifdef DITHERING\n\tgl_FragColor.rgb = dithering( gl_FragColor.rgb );\n#endif";
 
@@ -10041,7 +10039,7 @@
 	const vertex$2 = "uniform float rotation;\nuniform vec2 center;\n#include <common>\n#include <uv_pars_vertex>\n#include <fog_pars_vertex>\n#include <logdepthbuf_pars_vertex>\n#include <clipping_planes_pars_vertex>\nvoid main() {\n\t#include <uv_vertex>\n\tvec4 mvPosition = modelViewMatrix * vec4( 0.0, 0.0, 0.0, 1.0 );\n\tvec2 scale;\n\tscale.x = length( vec3( modelMatrix[ 0 ].x, modelMatrix[ 0 ].y, modelMatrix[ 0 ].z ) );\n\tscale.y = length( vec3( modelMatrix[ 1 ].x, modelMatrix[ 1 ].y, modelMatrix[ 1 ].z ) );\n\t#ifndef USE_SIZEATTENUATION\n\t\tbool isPerspective = isPerspectiveMatrix( projectionMatrix );\n\t\tif ( isPerspective ) scale *= - mvPosition.z;\n\t#endif\n\tvec2 alignedPosition = ( position.xy - ( center - vec2( 0.5 ) ) ) * scale;\n\tvec2 rotatedPosition;\n\trotatedPosition.x = cos( rotation ) * alignedPosition.x - sin( rotation ) * alignedPosition.y;\n\trotatedPosition.y = sin( rotation ) * alignedPosition.x + cos( rotation ) * alignedPosition.y;\n\tmvPosition.xy += rotatedPosition;\n\tgl_Position = projectionMatrix * mvPosition;\n\t#include <logdepthbuf_vertex>\n\t#include <clipping_planes_vertex>\n\t#include <fog_vertex>\n}";
 	const fragment$2 = "uniform vec3 diffuse;\nuniform float opacity;\n#include <common>\n#include <uv_pars_fragment>\n#include <map_pars_fragment>\n#include <alphamap_pars_fragment>\n#include <alphatest_pars_fragment>\n#include <fog_pars_fragment>\n#include <logdepthbuf_pars_fragment>\n#include <clipping_planes_pars_fragment>\nvoid main() {\n\t#include <clipping_planes_fragment>\n\tvec3 outgoingLight = vec3( 0.0 );\n\tvec4 diffuseColor = vec4( diffuse, opacity );\n\t#include <logdepthbuf_fragment>\n\t#include <map_fragment>\n\t#include <alphamap_fragment>\n\t#include <alphatest_fragment>\n\toutgoingLight = diffuseColor.rgb;\n\t#include <output_fragment>\n\t#include <tonemapping_fragment>\n\t#include <encodings_fragment>\n\t#include <fog_fragment>\n}";
 
-	const vertex$1 = "uniform mat4 previousViewMatrices[2];\nuniform mat4 previousModelMatrix;\n#define previousViewMatrix previousViewMatrices[VIEW_ID];\nvarying vec4 clipPositionCurrent;\nvarying vec4 clipPositionPrevious;\n#include <common>\nvoid main() {\n\t#include <velocity_vertex>\n}";
+	const vertex$1 = "uniform mat4 previousViewMatrices[2];\nuniform mat4 previousModelMatrix;\n#ifdef USE_INSTANCING\nattribute mat4 previousInstanceMatrix;\n#endif\n#define previousViewMatrix previousViewMatrices[VIEW_ID]\nvarying vec4 clipPositionCurrent;\nvarying vec4 clipPositionPrevious;\n#include <common>\nvoid main() {\n\t#include <velocity_vertex>\n}";
 	const fragment$1 = "void main() {\n\thighp vec4 motionVector = (clipPositionCurrent / clipPositionCurrent.w - clipPositionPrevious / clipPositionPrevious.w );\n\tgl_FragColor = motionVector;\n}";
 
 	const ShaderChunk = {
@@ -11031,6 +11029,7 @@
 					if (geometryAttribute === undefined) {
 						if (name === 'instanceMatrix' && object.instanceMatrix) geometryAttribute = object.instanceMatrix;
 						if (name === 'instanceColor' && object.instanceColor) geometryAttribute = object.instanceColor;
+						if (name === 'previousInstanceMatrix' && object.previousInstanceMatrix) geometryAttribute = object.previousInstanceMatrix;
 					}
 
 					if (cachedAttribute === undefined) return true;
@@ -11060,6 +11059,7 @@
 					if (attribute === undefined) {
 						if (name === 'instanceMatrix' && object.instanceMatrix) attribute = object.instanceMatrix;
 						if (name === 'instanceColor' && object.instanceColor) attribute = object.instanceColor;
+						if (name === 'previousInstanceMatrix' && object.previousInstanceMatrix) attribute = object.previousInstanceMatrix;
 					}
 
 					const data = {};
@@ -11148,6 +11148,7 @@
 					if (geometryAttribute === undefined) {
 						if (name === 'instanceMatrix' && object.instanceMatrix) geometryAttribute = object.instanceMatrix;
 						if (name === 'instanceColor' && object.instanceColor) geometryAttribute = object.instanceColor;
+						if (name === 'previousInstanceMatrix' && object.previousInstanceMatrix) geometryAttribute = object.previousInstanceMatrix;
 					}
 
 					if (geometryAttribute !== undefined) {
@@ -13047,6 +13048,10 @@
 
 				if (object.instanceColor !== null) {
 					attributes.update(object.instanceColor, gl.ARRAY_BUFFER);
+				}
+
+				if (object.previousInstanceMatrix !== null) {
+					attributes.update(object.previousInstanceMatrix, gl.ARRAY_BUFFER);
 				}
 			}
 
@@ -18355,6 +18360,28 @@
 
 	}
 
+	class InstancedBufferAttribute extends BufferAttribute {
+		constructor(array, itemSize, normalized, meshPerAttribute = 1) {
+			super(array, itemSize, normalized);
+			this.isInstancedBufferAttribute = true;
+			this.meshPerAttribute = meshPerAttribute;
+		}
+
+		copy(source) {
+			super.copy(source);
+			this.meshPerAttribute = source.meshPerAttribute;
+			return this;
+		}
+
+		toJSON() {
+			const data = super.toJSON();
+			data.meshPerAttribute = this.meshPerAttribute;
+			data.isInstancedBufferAttribute = true;
+			return data;
+		}
+
+	}
+
 	/**
 	 * @author fernandojsg / http://fernandojsg.com
 	 * @author Takahiro https://github.com/takahirox
@@ -18640,6 +18667,7 @@
 			this.type = 'VelocityMaterial';
 			this.previousModelMatrix = new Matrix4();
 			this.previousViewMatrices = [new Matrix4(), new Matrix4()];
+			this.previousInstanceMatrix = null;
 			this.setValues(parameters);
 		}
 
@@ -19205,6 +19233,12 @@
 						side: material.side
 					});
 					object._velocityMaterial.precision = 'highp';
+
+					if (object.isInstancedMesh === true) {
+						object.previousInstanceMatrix = new InstancedBufferAttribute(new Float32Array(object.instanceMatrix.count * 16), object.instanceMatrix.count);
+						object.previousInstanceMatrix.copy(object.instanceMatrix);
+						object.previousInstanceMatrix.needsUpdate = true;
+					}
 				}
 
 				return object._velocityMaterial;
@@ -19220,6 +19254,11 @@
 				object._velocityMaterial.previousViewMatrices[1].copy(cameraVR.cameras[1].matrixWorldInverse);
 
 				object._velocityMaterial.previousModelMatrix.copy(object.matrixWorld);
+
+				if (object.isInstancedMesh === true) {
+					object.previousInstanceMatrix.copy(object.instanceMatrix);
+					object.previousInstanceMatrix.needsUpdate = true;
+				}
 			};
 
 			const animation = new WebGLAnimation();
@@ -22640,28 +22679,6 @@
 
 	}
 
-	class InstancedBufferAttribute extends BufferAttribute {
-		constructor(array, itemSize, normalized, meshPerAttribute = 1) {
-			super(array, itemSize, normalized);
-			this.isInstancedBufferAttribute = true;
-			this.meshPerAttribute = meshPerAttribute;
-		}
-
-		copy(source) {
-			super.copy(source);
-			this.meshPerAttribute = source.meshPerAttribute;
-			return this;
-		}
-
-		toJSON() {
-			const data = super.toJSON();
-			data.meshPerAttribute = this.meshPerAttribute;
-			data.isInstancedBufferAttribute = true;
-			return data;
-		}
-
-	}
-
 	const _instanceLocalMatrix = /*@__PURE__*/new Matrix4();
 
 	const _instanceWorldMatrix = /*@__PURE__*/new Matrix4();
@@ -22676,6 +22693,7 @@
 			this.isInstancedMesh = true;
 			this.instanceMatrix = new InstancedBufferAttribute(new Float32Array(count * 16), 16);
 			this.instanceColor = null;
+			this.previousInstanceMatrix = null;
 			this.count = count;
 			this.frustumCulled = false;
 		}

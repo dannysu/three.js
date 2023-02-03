@@ -9000,8 +9000,6 @@ class Material extends EventDispatcher {
 		if ( this.toneMapped === false ) data.toneMapped = false;
 
 		if ( this.velocity === true ) data.velocity = true;
-		if ( this.previousModelMatrix !== undefined ) data.previousModelMatrix = this.previousModelMatrix;
-		if ( this.previousViewMatrices !== undefined ) data.previousViewMatrices = this.previousViewMatrices;
 
 		if ( this.fog === false ) data.fog = false;
 
@@ -13124,7 +13122,7 @@ var premultiplied_alpha_fragment = "#ifdef PREMULTIPLIED_ALPHA\n\tgl_FragColor.r
 
 var project_vertex = "vec4 mvPosition = vec4( transformed, 1.0 );\n#ifdef USE_INSTANCING\n\tmvPosition = instanceMatrix * mvPosition;\n#endif\nmvPosition = modelViewMatrix * mvPosition;\ngl_Position = projectionMatrix * mvPosition;";
 
-var velocity_vertex = "vec3 transformed = vec3( position );\nvec4 mvPosition = vec4( transformed, 1.0 );\n#ifdef USE_INSTANCING\n\tmvPosition = instanceMatrix * mvPosition;\n#endif\nclipPositionCurrent = projectionMatrix * ( modelViewMatrix * mvPosition );\nclipPositionPrevious = projectionMatrix * ( previousViewMatrix * (previousModelMatrix * mvPosition ));\ngl_Position = clipPositionCurrent;";
+var velocity_vertex = "vec3 transformed = vec3( position );\nvec4 mvPosition = vec4( transformed, 1.0 );\nvec4 mvPreviousPosition = vec4( transformed, 1.0 );\n#ifdef USE_INSTANCING\n\tmvPosition = instanceMatrix * mvPosition;\n\tmvPreviousPosition = previousInstanceMatrix * mvPreviousPosition;\n#endif\nclipPositionCurrent = projectionMatrix * ( modelViewMatrix * mvPosition );\nclipPositionPrevious = projectionMatrix * ( previousViewMatrix * (previousModelMatrix * mvPreviousPosition ));\ngl_Position = clipPositionCurrent;";
 
 var dithering_fragment = "#ifdef DITHERING\n\tgl_FragColor.rgb = dithering( gl_FragColor.rgb );\n#endif";
 
@@ -13240,7 +13238,7 @@ const vertex$2 = "uniform float rotation;\nuniform vec2 center;\n#include <commo
 
 const fragment$2 = "uniform vec3 diffuse;\nuniform float opacity;\n#include <common>\n#include <uv_pars_fragment>\n#include <map_pars_fragment>\n#include <alphamap_pars_fragment>\n#include <alphatest_pars_fragment>\n#include <fog_pars_fragment>\n#include <logdepthbuf_pars_fragment>\n#include <clipping_planes_pars_fragment>\nvoid main() {\n\t#include <clipping_planes_fragment>\n\tvec3 outgoingLight = vec3( 0.0 );\n\tvec4 diffuseColor = vec4( diffuse, opacity );\n\t#include <logdepthbuf_fragment>\n\t#include <map_fragment>\n\t#include <alphamap_fragment>\n\t#include <alphatest_fragment>\n\toutgoingLight = diffuseColor.rgb;\n\t#include <output_fragment>\n\t#include <tonemapping_fragment>\n\t#include <encodings_fragment>\n\t#include <fog_fragment>\n}";
 
-const vertex$1 = "uniform mat4 previousViewMatrices[2];\nuniform mat4 previousModelMatrix;\n#define previousViewMatrix previousViewMatrices[VIEW_ID];\nvarying vec4 clipPositionCurrent;\nvarying vec4 clipPositionPrevious;\n#include <common>\nvoid main() {\n\t#include <velocity_vertex>\n}";
+const vertex$1 = "uniform mat4 previousViewMatrices[2];\nuniform mat4 previousModelMatrix;\n#ifdef USE_INSTANCING\nattribute mat4 previousInstanceMatrix;\n#endif\n#define previousViewMatrix previousViewMatrices[VIEW_ID]\nvarying vec4 clipPositionCurrent;\nvarying vec4 clipPositionPrevious;\n#include <common>\nvoid main() {\n\t#include <velocity_vertex>\n}";
 
 const fragment$1 = "void main() {\n\thighp vec4 motionVector = (clipPositionCurrent / clipPositionCurrent.w - clipPositionPrevious / clipPositionPrevious.w );\n\tgl_FragColor = motionVector;\n}";
 
@@ -13892,7 +13890,7 @@ const ShaderLib = {
 			UniformsLib.common,
 			{
 				previousModelMatrix: { value: new Matrix4() },
-				previousViewMatrices: { value: [ new Matrix4(), new Matrix4() ] },
+				previousViewMatrices: { value: [ new Matrix4(), new Matrix4() ] }
 			}
 		] ),
 
@@ -14348,6 +14346,7 @@ function WebGLBindingStates( gl, extensions, attributes, capabilities ) {
 
 					if ( name === 'instanceMatrix' && object.instanceMatrix ) geometryAttribute = object.instanceMatrix;
 					if ( name === 'instanceColor' && object.instanceColor ) geometryAttribute = object.instanceColor;
+					if ( name === 'previousInstanceMatrix' && object.previousInstanceMatrix ) geometryAttribute = object.previousInstanceMatrix;
 
 				}
 
@@ -14391,6 +14390,7 @@ function WebGLBindingStates( gl, extensions, attributes, capabilities ) {
 
 					if ( name === 'instanceMatrix' && object.instanceMatrix ) attribute = object.instanceMatrix;
 					if ( name === 'instanceColor' && object.instanceColor ) attribute = object.instanceColor;
+					if ( name === 'previousInstanceMatrix' && object.previousInstanceMatrix ) attribute = object.previousInstanceMatrix;
 
 				}
 
@@ -14522,6 +14522,7 @@ function WebGLBindingStates( gl, extensions, attributes, capabilities ) {
 
 					if ( name === 'instanceMatrix' && object.instanceMatrix ) geometryAttribute = object.instanceMatrix;
 					if ( name === 'instanceColor' && object.instanceColor ) geometryAttribute = object.instanceColor;
+					if ( name === 'previousInstanceMatrix' && object.previousInstanceMatrix ) geometryAttribute = object.previousInstanceMatrix;
 
 				}
 
@@ -17106,6 +17107,12 @@ function WebGLObjects( gl, geometries, attributes, info ) {
 			if ( object.instanceColor !== null ) {
 
 				attributes.update( object.instanceColor, 34962 );
+
+			}
+
+			if ( object.previousInstanceMatrix !== null ) {
+
+				attributes.update( object.previousInstanceMatrix, 34962 );
 
 			}
 
@@ -25009,6 +25016,42 @@ class ArrayCamera extends PerspectiveCamera {
 
 }
 
+class InstancedBufferAttribute extends BufferAttribute {
+
+	constructor( array, itemSize, normalized, meshPerAttribute = 1 ) {
+
+		super( array, itemSize, normalized );
+
+		this.isInstancedBufferAttribute = true;
+
+		this.meshPerAttribute = meshPerAttribute;
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.meshPerAttribute = source.meshPerAttribute;
+
+		return this;
+
+	}
+
+	toJSON() {
+
+		const data = super.toJSON();
+
+		data.meshPerAttribute = this.meshPerAttribute;
+
+		data.isInstancedBufferAttribute = true;
+
+		return data;
+
+	}
+
+}
+
 /**
  * @author fernandojsg / http://fernandojsg.com
  * @author Takahiro https://github.com/takahirox
@@ -25401,6 +25444,7 @@ class VelocityMaterial extends Material {
 
 		this.previousModelMatrix = new Matrix4();
 		this.previousViewMatrices = [ new Matrix4(), new Matrix4() ];
+		this.previousInstanceMatrix = null;
 
 		this.setValues( parameters );
 
@@ -26195,6 +26239,14 @@ class WebXRManager extends EventDispatcher {
 
 				object._velocityMaterial.precision = 'highp';
 
+				if ( object.isInstancedMesh === true ) {
+
+					object.previousInstanceMatrix = new InstancedBufferAttribute( new Float32Array( object.instanceMatrix.count * 16 ), object.instanceMatrix.count );
+					object.previousInstanceMatrix.copy( object.instanceMatrix );
+					object.previousInstanceMatrix.needsUpdate = true;
+
+				}
+
 			}
 
 			return object._velocityMaterial;
@@ -26212,6 +26264,13 @@ class WebXRManager extends EventDispatcher {
 			object._velocityMaterial.previousViewMatrices[ 0 ].copy( cameraVR.cameras[ 0 ].matrixWorldInverse );
 			object._velocityMaterial.previousViewMatrices[ 1 ].copy( cameraVR.cameras[ 1 ].matrixWorldInverse );
 			object._velocityMaterial.previousModelMatrix.copy( object.matrixWorld );
+
+			if ( object.isInstancedMesh === true ) {
+
+				object.previousInstanceMatrix.copy( object.instanceMatrix );
+				object.previousInstanceMatrix.needsUpdate = true;
+
+			}
 
 		};
 
@@ -31138,42 +31197,6 @@ class Skeleton {
 
 }
 
-class InstancedBufferAttribute extends BufferAttribute {
-
-	constructor( array, itemSize, normalized, meshPerAttribute = 1 ) {
-
-		super( array, itemSize, normalized );
-
-		this.isInstancedBufferAttribute = true;
-
-		this.meshPerAttribute = meshPerAttribute;
-
-	}
-
-	copy( source ) {
-
-		super.copy( source );
-
-		this.meshPerAttribute = source.meshPerAttribute;
-
-		return this;
-
-	}
-
-	toJSON() {
-
-		const data = super.toJSON();
-
-		data.meshPerAttribute = this.meshPerAttribute;
-
-		data.isInstancedBufferAttribute = true;
-
-		return data;
-
-	}
-
-}
-
 const _instanceLocalMatrix = /*@__PURE__*/ new Matrix4();
 const _instanceWorldMatrix = /*@__PURE__*/ new Matrix4();
 
@@ -31191,6 +31214,7 @@ class InstancedMesh extends Mesh {
 
 		this.instanceMatrix = new InstancedBufferAttribute( new Float32Array( count * 16 ), 16 );
 		this.instanceColor = null;
+		this.previousInstanceMatrix = null;
 
 		this.count = count;
 
