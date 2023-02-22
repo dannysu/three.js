@@ -19135,6 +19135,7 @@
 				}
 			};
 
+			let onShouldRenderVelocityCallback = null;
 			let onVelocityCallback = null;
 
 			function onAnimationFrame(time, frame) {
@@ -19197,27 +19198,34 @@
 				if (onAnimationFrameCallback) onAnimationFrameCallback(time, frame);
 
 				if (onVelocityCallback) {
-					isRenderingSpaceWarp = true;
+					let shouldRenderMotionPass = true;
 
-					if (velocityRenderTarget === null) {
-						const rtOptions = {
-							format: RGBAFormat,
-							type: HalfFloatType,
-							depthTexture: new DepthTexture(glSubImage.depthStencilTextureWidth, glSubImage.textureHeight, UnsignedInt248Type, undefined, undefined, undefined, undefined, undefined, undefined, DepthFormat),
-							stencilBuffer: attributes.stencil,
-							encoding: renderer.outputEncoding,
-							samples: 0
-						};
-						extensions.get('OCULUS_multiview');
-						velocityRenderTarget = new WebGLMultiviewRenderTarget(glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight, 2, rtOptions);
+					if (onShouldRenderVelocityCallback) {
+						shouldRenderMotionPass = onShouldRenderVelocityCallback();
 					}
 
-					renderer.setRenderTargetTextures(velocityRenderTarget, glSubImage.motionVectorTexture, glSubImage.depthStencilTexture);
-					renderer.setRenderTarget(velocityRenderTarget);
-					cameraVR.cameras[0].viewport.set(0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight);
-					cameraVR.cameras[1].viewport.set(0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight);
-					onVelocityCallback(time, frame);
-					isRenderingSpaceWarp = false;
+					if (shouldRenderMotionPass) {
+						isRenderingSpaceWarp = true;
+
+						if (velocityRenderTarget === null) {
+							const rtOptions = {
+								format: RGBAFormat,
+								type: HalfFloatType,
+								depthTexture: new DepthTexture(glSubImage.depthStencilTextureWidth, glSubImage.textureHeight, UnsignedInt248Type, undefined, undefined, undefined, undefined, undefined, undefined, DepthFormat),
+								stencilBuffer: attributes.stencil,
+								encoding: renderer.outputEncoding,
+								samples: 0
+							};
+							velocityRenderTarget = new WebGLMultiviewRenderTarget(glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight, 2, rtOptions);
+						}
+
+						renderer.setRenderTargetTextures(velocityRenderTarget, glSubImage.motionVectorTexture, glSubImage.depthStencilTexture);
+						renderer.setRenderTarget(velocityRenderTarget);
+						cameraVR.cameras[0].viewport.set(0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight);
+						cameraVR.cameras[1].viewport.set(0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight);
+						onVelocityCallback(time, frame);
+						isRenderingSpaceWarp = false;
+					}
 				}
 
 				xrFrame = null;
@@ -19264,8 +19272,9 @@
 			const animation = new WebGLAnimation();
 			animation.setAnimationLoop(onAnimationFrame);
 
-			this.setAnimationLoop = function (callback, velocityCallback) {
+			this.setAnimationLoop = function (callback, velocityCallback, shouldRenderVelocityCallback) {
 				onAnimationFrameCallback = callback;
+				onShouldRenderVelocityCallback = shouldRenderVelocityCallback;
 				onVelocityCallback = velocityCallback;
 			};
 
@@ -20619,9 +20628,9 @@
 		animation.setAnimationLoop(onAnimationFrame);
 		if (typeof self !== 'undefined') animation.setContext(self);
 
-		this.setAnimationLoop = function (callback, velocityCallback) {
+		this.setAnimationLoop = function (callback, velocityCallback, shouldRenderVelocityCallback) {
 			onAnimationFrameCallback = callback;
-			xr.setAnimationLoop(callback, velocityCallback);
+			xr.setAnimationLoop(callback, velocityCallback, shouldRenderVelocityCallback);
 			callback === null ? animation.stop() : animation.start();
 		};
 
