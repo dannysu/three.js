@@ -13065,6 +13065,7 @@ function WebGLObjects(gl, geometries, attributes, info) {
 		instancedMesh.removeEventListener('dispose', onInstancedMeshDispose);
 		attributes.remove(instancedMesh.instanceMatrix);
 		if (instancedMesh.instanceColor !== null) attributes.remove(instancedMesh.instanceColor);
+		if (instancedMesh.previousInstanceMatrix !== null) attributes.remove(instancedMesh.previousInstanceMatrix);
 	}
 
 	return {
@@ -18665,7 +18666,6 @@ class VelocityMaterial extends Material {
 		this.type = 'VelocityMaterial';
 		this.previousModelMatrix = new Matrix4();
 		this.previousViewMatrices = [new Matrix4(), new Matrix4()];
-		this.previousInstanceMatrix = null;
 		this.setValues(parameters);
 	}
 
@@ -19233,7 +19233,7 @@ class WebXRManager extends EventDispatcher {
 				object._velocityMaterial.precision = 'highp';
 
 				if (object.isInstancedMesh === true) {
-					object.previousInstanceMatrix = new InstancedBufferAttribute(new Float32Array(object.instanceMatrix.count * 16), object.instanceMatrix.count);
+					object.previousInstanceMatrix = new InstancedBufferAttribute(new Float32Array(object.instanceMatrix.count * 16), 16);
 					object.previousInstanceMatrix.copy(object.instanceMatrix);
 					object.previousInstanceMatrix.needsUpdate = true;
 				}
@@ -22700,6 +22700,15 @@ class InstancedMesh extends Mesh {
 		super.copy(source, recursive);
 		this.instanceMatrix.copy(source.instanceMatrix);
 		if (source.instanceColor !== null) this.instanceColor = source.instanceColor.clone();
+
+		if (source.previousInstanceMatrix !== null) {
+			if (this.previousInstanceMatrix === null) {
+				this.previousInstanceMatrix = new InstancedBufferAttribute(new Float32Array(source.count * 16), 16);
+			}
+
+			this.previousInstanceMatrix.copy(source.previousInstanceMatrix);
+		}
+
 		this.count = source.count;
 		return this;
 	}
