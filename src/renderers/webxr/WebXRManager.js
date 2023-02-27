@@ -360,7 +360,7 @@ class WebXRManager extends EventDispatcher {
 					}
 
 					const renderTargetProperties = renderer.properties.get( newRenderTarget );
-					renderTargetProperties.__ignoreDepthValues = glProjLayer.ignoreDepthValues;
+					renderTargetProperties.__ignoreDepthValues = true;
 
 				}
 
@@ -644,12 +644,43 @@ class WebXRManager extends EventDispatcher {
 
 			} else {
 
-				renderer.setRenderTargetTextures(
-					newRenderTarget,
-					glSubImage.colorTexture,
-					glProjLayer.ignoreDepthValues ? undefined : glSubImage.depthStencilTexture );
+				if ( isRenderingSpaceWarp ) {
 
-				renderer.setRenderTarget( newRenderTarget );
+					if ( velocityRenderTarget === null ) {
+
+						const rtOptions = {
+							format: RGBAFormat,
+							type: HalfFloatType,
+							depthTexture: new DepthTexture( glSubImage.depthStencilTextureWidth, glSubImage.textureHeight, UnsignedInt248Type, undefined, undefined, undefined, undefined, undefined, undefined, DepthFormat ),
+							stencilBuffer: attributes.stencil,
+							encoding: renderer.outputEncoding,
+							samples: 0
+						};
+
+						velocityRenderTarget = new WebGLMultiviewRenderTarget( glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight, 2, rtOptions );
+						velocityRenderTarget.isXRRenderTarget = true;
+
+						const renderTargetProperties = renderer.properties.get( velocityRenderTarget );
+						renderTargetProperties.__ignoreDepthValues = false;
+					}
+
+					renderer.setRenderTargetTextures(
+						velocityRenderTarget,
+						glSubImage.motionVectorTexture,
+						glSubImage.depthStencilTexture );
+
+					renderer.setRenderTarget( velocityRenderTarget );
+
+				} else {
+
+					renderer.setRenderTargetTextures(
+						newRenderTarget,
+						glSubImage.colorTexture,
+						undefined );
+
+					renderer.setRenderTarget( newRenderTarget );
+
+				}
 
 			}
 
@@ -755,28 +786,6 @@ class WebXRManager extends EventDispatcher {
 				if ( shouldRenderMotionPass ) {
 
 					isRenderingSpaceWarp = true;
-
-					if ( velocityRenderTarget === null ) {
-
-						const rtOptions = {
-							format: RGBAFormat,
-							type: HalfFloatType,
-							depthTexture: new DepthTexture( glSubImage.depthStencilTextureWidth, glSubImage.textureHeight, UnsignedInt248Type, undefined, undefined, undefined, undefined, undefined, undefined, DepthFormat ),
-							stencilBuffer: attributes.stencil,
-							encoding: renderer.outputEncoding,
-							samples: 0
-						};
-
-						velocityRenderTarget = new WebGLMultiviewRenderTarget( glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight, 2, rtOptions );
-
-					}
-
-					renderer.setRenderTargetTextures(
-						velocityRenderTarget,
-						glSubImage.motionVectorTexture,
-						glSubImage.depthStencilTexture );
-
-					renderer.setRenderTarget( velocityRenderTarget );
 
 					cameraVR.cameras[ 0 ].viewport.set( 0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight );
 					cameraVR.cameras[ 1 ].viewport.set( 0, 0, glSubImage.motionVectorTextureWidth, glSubImage.motionVectorTextureHeight );
