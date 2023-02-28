@@ -26547,7 +26547,6 @@ class WebXRManager extends EventDispatcher {
 
 				if ( object.isInstancedMesh === true ) {
 
-					object.previousInstanceMatrix = new InstancedBufferAttribute( new Float32Array( object.instanceMatrix.count * 16 ), 16 );
 					object.previousInstanceMatrix.copy( object.instanceMatrix );
 					object.previousInstanceMatrix.needsUpdate = true;
 
@@ -31473,7 +31472,7 @@ class InstancedMesh extends Mesh {
 
 		this.instanceMatrix = new InstancedBufferAttribute( new Float32Array( count * 16 ), 16 );
 		this.instanceColor = null;
-		this.previousInstanceMatrix = null;
+		this.previousInstanceMatrix = new InstancedBufferAttribute( new Float32Array( count * 16 ), 16 );
 
 		this.count = count;
 
@@ -51469,4 +51468,3 @@ exports.ZeroSlopeEnding = ZeroSlopeEnding;
 exports.ZeroStencilOp = ZeroStencilOp;
 exports._SRGBAFormat = _SRGBAFormat;
 exports.sRGBEncoding = sRGBEncoding;
-//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoidGhyZWUuY2pzIiwic291cmNlcyI6W10sInNvdXJjZXNDb250ZW50IjpbXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IiJ9

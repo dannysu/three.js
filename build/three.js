@@ -26552,7 +26552,6 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
 
 					if ( object.isInstancedMesh === true ) {
 
-						object.previousInstanceMatrix = new InstancedBufferAttribute( new Float32Array( object.instanceMatrix.count * 16 ), 16 );
 						object.previousInstanceMatrix.copy( object.instanceMatrix );
 						object.previousInstanceMatrix.needsUpdate = true;
 
@@ -31478,7 +31477,7 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
 
 			this.instanceMatrix = new InstancedBufferAttribute( new Float32Array( count * 16 ), 16 );
 			this.instanceColor = null;
-			this.previousInstanceMatrix = null;
+			this.previousInstanceMatrix = new InstancedBufferAttribute( new Float32Array( count * 16 ), 16 );
 
 			this.count = count;
 
@@ -51476,4 +51475,3 @@ console.warn( 'Scripts "build/three.js" and "build/three.min.js" are deprecated 
 	exports.sRGBEncoding = sRGBEncoding;
 
 }));
-//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoidGhyZWUuanMiLCJzb3VyY2VzIjpbXSwic291cmNlc0NvbnRlbnQiOltdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiIn0=
