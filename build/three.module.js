@@ -26261,7 +26261,6 @@ class WebXRManager extends EventDispatcher {
 
 				if ( object.isInstancedMesh === true ) {
 
-					object.previousInstanceMatrix = new InstancedBufferAttribute( new Float32Array( object.instanceMatrix.count * 16 ), 16 );
 					object.previousInstanceMatrix.copy( object.instanceMatrix );
 					object.previousInstanceMatrix.needsUpdate = true;
 
@@ -31235,7 +31234,7 @@ class InstancedMesh extends Mesh {
 
 		this.instanceMatrix = new InstancedBufferAttribute( new Float32Array( count * 16 ), 16 );
 		this.instanceColor = null;
-		this.previousInstanceMatrix = null;
+		this.previousInstanceMatrix = new InstancedBufferAttribute( new Float32Array( count * 16 ), 16 );
 
 		this.count = count;
 
